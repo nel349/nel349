@@ -9,6 +9,8 @@ import sys
 import urllib.request
 from pathlib import Path
 
+from space import AMBER, GRAY, GREEN, scanlines, starfield, svg
+
 GRAPHQL_ENDPOINT = "https://api.github.com/graphql"
 LOGIN = os.environ.get("PROFILE_LOGIN", "nel349")
 OUT = Path(__file__).resolve().parent.parent / "assets" / "c-proof-eater.svg"
@@ -24,8 +26,6 @@ QUERY = """query($login: String!) {
   }
 }"""
 
-MONO = "ui-monospace,SFMono-Regular,Menlo,Consolas,'Liberation Mono',monospace"
-PANEL, BORDER, GRAY, GREEN, AMBER = "#0d1117", "#30363d", "#8b949e", "#3fb950", "#f0b429"
 LEVELS = {"NONE": 0, "FIRST_QUARTILE": 1, "SECOND_QUARTILE": 2, "THIRD_QUARTILE": 3, "FOURTH_QUARTILE": 4}
 SHADES = ["#161b22", "#2d2257", "#4a35a0", "#7c5cff", "#c4b5ff"]
 
@@ -44,12 +44,6 @@ def fetch_calendar(token):
     return payload["data"]["user"]["contributionsCollection"]["contributionCalendar"]
 
 
-def scanlines(w, h):
-    return ('<defs><pattern id="scan" width="4" height="4" patternUnits="userSpaceOnUse">'
-            '<rect width="4" height="1" fill="#ffffff" opacity="0.025"/></pattern></defs>'
-            f'<rect width="{w}" height="{h}" rx="12" fill="url(#scan)"/>')
-
-
 def draw(calendar):
     weeks, total = calendar["weeks"], calendar["totalContributions"]
     pitch = CELL + GAP
@@ -60,7 +54,8 @@ def draw(calendar):
         days = list(range(len(wk["contributionDays"])))
         order += [(wi, di) for di in (days if wi % 2 == 0 else reversed(days))]
     period = len(order) * STEP_SECONDS + PAUSE_SECONDS
-    css, cells, frames = [f".h{{animation:mv {period:.2f}s linear infinite}}"], [], []
+    stars, star_css = starfield(WIDTH, h, seed=99)
+    css, cells, frames = [star_css, f".h{{animation:mv {period:.2f}s linear infinite}}"], [], []
     for idx, (wi, di) in enumerate(order):
         level = LEVELS[weeks[wi]["contributionDays"][di]["contributionLevel"]]
         x, y = OX + wi * pitch, OY + di * pitch
@@ -77,14 +72,13 @@ def draw(calendar):
     css.append("@keyframes mv{" + "".join(frames) + "}")
     snake = "".join(f'<rect class="h" style="animation-delay:-{period - k * STEP_SECONDS:.3f}s" width="{CELL}" '
                     f'height="{CELL}" rx="3" fill="{GREEN}" opacity="{1 - k * 0.22:.2f}"/>' for k in range(TAIL))
-    body = (f'<rect width="{WIDTH}" height="{h}" rx="12" fill="{PANEL}" stroke="{BORDER}"/>'
+    body = (stars +
             f'<text x="32" y="36" font-size="16" font-weight="700" fill="{GREEN}">PROOF-EATER</text>'
             f'<text x="170" y="36" font-size="13" fill="{GRAY}">eats commits, leaves proofs</text>'
             f'<text x="{WIDTH - 32}" y="36" text-anchor="end" font-size="12" fill="{GRAY}">HIGH SCORE '
             f'<tspan font-size="16" font-weight="700" fill="{AMBER}">{total:,}</tspan></text>'
             + "".join(cells) + snake + scanlines(WIDTH, h))
-    return (f'<svg xmlns="http://www.w3.org/2000/svg" width="{WIDTH}" height="{h}" viewBox="0 0 {WIDTH} {h}" '
-            f'font-family="{MONO}"><style>{"".join(css)}</style>{body}</svg>\n')
+    return svg(WIDTH, h, body, "".join(css))
 
 
 def main():
